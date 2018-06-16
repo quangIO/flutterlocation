@@ -30,13 +30,6 @@ class _MyAppState extends State<MyApp> {
     super.initState();
 
     initPlatformState();
-
-    _locationSubscription =
-        _location.onLocationChanged.listen((Map<String,double> result) {
-          setState(() {
-            _currentLocation = result;
-          });
-        });
   }
 
   // Platform messages are asynchronous, so we initialize in an async method.
@@ -56,6 +49,14 @@ class _MyAppState extends State<MyApp> {
       }
 
       location = null;
+    }
+    if (location != null) {
+      _locationSubscription =
+          _location.onLocationChanged.listen((Map<String, double> result) {
+            setState(() {
+              _currentLocation = result;
+            });
+          });
     }
 
     // If the widget was removed from the tree while the asynchronous platform

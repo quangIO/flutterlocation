@@ -3,19 +3,13 @@ package com.lyokone.location;
 import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
-import android.content.BroadcastReceiver;
 import android.content.IntentSender;
-import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.Looper;
-import android.support.annotation.MainThread;
 import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
-import android.support.v4.content.ContextCompat;
 import android.util.Log;
 
 import com.google.android.gms.common.api.ApiException;
@@ -30,12 +24,9 @@ import com.google.android.gms.location.SettingsClient;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.OnSuccessListener;
-import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.Task;
 
 import java.util.HashMap;
-import java.lang.RuntimeException;
 
 import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.EventChannel.EventSink;
@@ -71,9 +62,10 @@ public class LocationPlugin implements MethodCallHandler, StreamHandler {
 
     private final Activity activity;
 
-    LocationPlugin(Activity activity) {
-        this.activity = activity;
-        mFusedLocationClient = LocationServices.getFusedLocationProviderClient(activity);
+    private LocationPlugin(Context context) {
+        this.activity = (Activity) context;
+        // this.context = context;
+        mFusedLocationClient = LocationServices.getFusedLocationProviderClient(context);
         mSettingsClient = LocationServices.getSettingsClient(activity);
         createLocationCallback();
         createLocationRequest();
@@ -81,7 +73,7 @@ public class LocationPlugin implements MethodCallHandler, StreamHandler {
         buildLocationSettingsRequest();
     }
 
-    public PluginRegistry.RequestPermissionsResultListener getPermissionsResultListener() {
+    private PluginRegistry.RequestPermissionsResultListener getPermissionsResultListener() {
         return mPermissionsResultListener;
     }
 
@@ -99,7 +91,7 @@ public class LocationPlugin implements MethodCallHandler, StreamHandler {
                     } else {
                         if (!shouldShowRequestPermissionRationale()) {
                             if (result != null) {
-                                result.error("PERMISSION_DENIED_NEVER_ASK", "Location permission denied forever- please open app settings", null);
+                                result.error("PERMISSION_DENIED_NEVER_ASK", "Location permission denied forever - please open app settings", null);
                             } else if (events != null) {
                                 events.error("PERMISSION_DENIED_NEVER_ASK", "Location permission denied forever - please open app settings", null);
                                 events = null;
@@ -115,7 +107,6 @@ public class LocationPlugin implements MethodCallHandler, StreamHandler {
                     }
                     return true;
                 }
-
                 return false;
             }
         };
@@ -187,9 +178,9 @@ public class LocationPlugin implements MethodCallHandler, StreamHandler {
     /**
      * Return the current state of the permissions needed.
      */
-    private boolean checkPermissions() {
+    private boolean needPermissions() {
         int permissionState = ActivityCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_FINE_LOCATION);
-        return permissionState == PackageManager.PERMISSION_GRANTED;
+        return permissionState != PackageManager.PERMISSION_GRANTED;
     }
 
     private void requestPermissions() {
@@ -206,12 +197,12 @@ public class LocationPlugin implements MethodCallHandler, StreamHandler {
      */
     public static void registerWith(Registrar registrar) {
         final MethodChannel channel = new MethodChannel(registrar.messenger(), METHOD_CHANNEL_NAME);
-        LocationPlugin locationWithMethodChannel = new LocationPlugin(registrar.activity());
+        LocationPlugin locationWithMethodChannel = new LocationPlugin(registrar.activeContext());
         channel.setMethodCallHandler(locationWithMethodChannel);
         registrar.addRequestPermissionsResultListener(locationWithMethodChannel.getPermissionsResultListener());
 
         final EventChannel eventChannel = new EventChannel(registrar.messenger(), STREAM_CHANNEL_NAME);
-        LocationPlugin locationWithEventChannel = new LocationPlugin(registrar.activity());
+        LocationPlugin locationWithEventChannel = new LocationPlugin(registrar.activeContext());
         eventChannel.setStreamHandler(locationWithEventChannel);
         registrar.addRequestPermissionsResultListener(locationWithEventChannel.getPermissionsResultListener());
     }
@@ -239,7 +230,6 @@ public class LocationPlugin implements MethodCallHandler, StreamHandler {
                 } else {
                     if (result != null) {
                         result.error("ERROR", "Failed to get location.", null);
-                        return;
                     }
                     // Do not send error on events otherwise it will produce an error
                 }
@@ -250,7 +240,7 @@ public class LocationPlugin implements MethodCallHandler, StreamHandler {
     @Override
     public void onMethodCall(MethodCall call, final Result result) {
         if (call.method.equals("getLocation")) {
-            if (!checkPermissions()) {
+            if (needPermissions()) {
                 this.result = result;
                 requestPermissions();
                 return;
@@ -264,12 +254,12 @@ public class LocationPlugin implements MethodCallHandler, StreamHandler {
     @Override
     public void onListen(Object arguments, final EventSink eventsSink) {
         events = eventsSink;
-        if (!checkPermissions()) {
+        if (needPermissions()) {
             requestPermissions();
             return;
         }
         getLastLocation(null);
-        /**
+        /*
          * Requests location updates from the FusedLocationApi. Note: we don't call this unless location
          * runtime permission has been granted.
          */
